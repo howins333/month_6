@@ -1,0 +1,18 @@
+version: '3'
+services:
+  cinematica:
+    build:
+      context: .
+    command: sh -c "python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8001:8000"
+  cinema_data:
+    image: 'postgres:14'
+    environment:
+      POSTGRES_DB: datavase_cinematica
+      POSTGRES_USER: database_user
+      POSTGRES_PASSWORD: azisazis
+    volumes:
+      - 'data:/var/lib/postgresql/data'
+volumes:
+  data:
