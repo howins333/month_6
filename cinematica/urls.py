@@ -20,7 +20,7 @@ from . import swagger
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/v1/films/', include('films.urls')),
+    path('api/v1/products/', include('films.urls')),
     path('api/v1/users/', include('users.urls')),
 ]
 

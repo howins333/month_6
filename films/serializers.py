@@ -1,65 +1,70 @@
 from rest_framework import serializers
-from .models import Film, Director, Genre
+from .models import Category, Product, Review
 from rest_framework.exceptions import ValidationError
 
-class GenreSerializer(serializers.ModelSerializer):
+class CategorySerializer(serializers.ModelSerializer):
+    products_count = serializers.SerializerMethodField()
+
     class Meta:
-        model = Genre
+        model = Category
+        fields = ['id', 'name', 'products_count']
+
+    def get_products_count(self, category):
+            return Product.objects.filter(category=category).count()
+
+
+class ReviewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Review
         fields = '__all__'
 
-class DirectorSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Director
-        fields = 'id first_name last_name birthday'.split()
 
-class DirectorListSerializer(serializers.ModelSerializer):
+class ProductSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Director
-        fields = 'id first_name last_name'.split()
-
-
-class FilmDetailSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Film
+        model = Product
         fields = '__all__'
 
-class FilmListSerializer(serializers.ModelSerializer):
-    director = DirectorSerializer()
-    # genres = GenreSerializer(many=True)
-    genres = serializers.SerializerMethodField()
 
+class ProductWithReviewsSerializer(serializers.ModelSerializer):
+    # reviews = ReviewSerializer(many=True, read_only=True)
+    rating = serializers.SerializerMethodField()
 
     class Meta:
-        model = Film
-        # fields = [ 'id', 'title', 'rating', 'created_at']
-        # fields = '__all__'
-        # exclude = ['text', 'updated']
-        fields = 'id title rating created_at director genres reviews'.split()
-        # depth = 1
-    def get_genres(self, film):
-        return film.genre_list()
+        model = Product
+        fields = ['id', 'title', 'description', 'price', 'category', 'reviews', 'rating']
+        depth = 1
 
-class FilmValidator(serializers.Serializer):
-    title = serializers.CharField(max_length=255, min_length=1)
-    text = serializers.CharField(required=False, default='No text')
-    release_date = serializers.IntegerField()
-    rating = serializers.FloatField(min_value=1, max_value=10)
-    is_hit = serializers.BooleanField(default=False)
-    director_id = serializers.IntegerField()
-    genres = serializers.ListField(child=serializers.IntegerField())
+    def get_rating(self, obj):
+        reviews = obj.reviews.all()
+        if reviews.exists():
+            return round(sum([r.stars for r in reviews]) / reviews.count(), 2)
+        return None
 
-    def validate_director_id(self, director_id):
-        director_id = director_id['director_id']
+
+class CategoryValidateSerializer(serializers.Serializer):
+    name = serializers.CharField(required=True, min_length=2, max_length=100)
+
+
+class ProductValidateSerializer(serializers.Serializer):
+    title = serializers.CharField(required=True, min_length=2, max_length=255)
+    description = serializers.CharField(required=False, allow_blank=True)
+    price = serializers.FloatField(min_value=0.01)
+    category = serializers.IntegerField(min_value=1)
+
+    def validate_category(self, category_id):
         try:
-            Director.objects.get(id=director_id)
-        except Director.DoesNotExist:
-            raise ValidationError('Director does not exist')
+            return Category.objects.get(id=category_id)
+        except Category.DoesNotExist:
+            raise ValidationError('Category does not exist')
 
-        return director_id
 
-    def validate_genres(self, genres):
-        genres_from_db = Genre.objects.filter(id__in=genres)
-        if len(genres_from_db) != len(genres):
-            raise ValidationError('Genre does not exist')
-        return genres
+class ReviewValidateSerializer(serializers.Serializer):
+    text = serializers.CharField(required=True, min_length=1)
+    stars = serializers.IntegerField(min_value=1, max_value=5)
+    product = serializers.IntegerField(min_value=1)
 
+    def validate_product(self, product_id):
+        try:
+            return Product.objects.get(id=product_id)
+        except Product.DoesNotExist:
+            raise ValidationError('Product does not exist')

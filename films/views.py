@@ -1,113 +1,161 @@
-from rest_framework.decorators import api_view
+from collections import OrderedDict
+from django.db import transaction
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.status import HTTP_400_BAD_REQUEST
-from rest_framework. generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.viewsets import ModelViewSet
+from rest_framework.views import APIView
 
-from .models import Film, Genre, Director
+from .models import Category, Product, Review
 from .serializers import (
-    FilmListSerializer,
-    FilmDetailSerializer,
-    FilmValidator,
-    GenreSerializer,
-    DirectorSerializer,
-    DirectorListSerializer
+    CategorySerializer,
+    ProductSerializer,
+    ReviewSerializer,
+    ProductWithReviewsSerializer,
+    CategoryValidateSerializer,
+    ProductValidateSerializer,
+    ReviewValidateSerializer
 )
+from common.permissions import CanEditWithIn15Minutes, IsAuth, IsAnon, IsModerator
+
+PAGE_SIZE = 5
+
 
 class CustomPagination(PageNumberPagination):
-    page_size = 3
     def get_paginated_response(self, data):
-        return Response({
-            'total': self.page.paginator.count,
-            'next': self.get_next_link(),
-            'previous': self.get_previous_link(),
-            'results': data,
-        })
+        return Response(OrderedDict([
+            ('total', self.page.paginator.count),
+            ('next', self.get_next_link()),
+            ('previous', self.get_previous_link()),
+            ('results', data)
+        ]))
 
-class GenreListAPIView(ListCreateAPIView):
-    queryset = Genre.objects.all()
-    serializer_class = GenreSerializer
+    def get_page_size(self, request):
+        return PAGE_SIZE
+
+
+class CategoryListCreateAPIView(ListCreateAPIView):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
     pagination_class = CustomPagination
 
-class GenreDetailAPIView(RetrieveUpdateDestroyAPIView):
-    queryset = Genre.objects.all()
-    serializer_class = GenreSerializer
+    def post(self, request, *args, **kwargs):
+        serializer = CategoryValidateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        category = Category.objects.create(**serializer.validated_data)
+        return Response(data=CategorySerializer(category).data,
+                        status=status.HTTP_201_CREATED)
+
+
+class CategoryDetailAPIView(RetrieveUpdateDestroyAPIView):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
     lookup_field = 'id'
 
-class DirectorViewSet(ModelViewSet):
-    queryset = Director.objects.all()
-    serializer_class = DirectorSerializer
+    def put(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = CategoryValidateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        instance.name = serializer.validated_data.get('name')
+        instance.save()
+
+        return Response(data=CategorySerializer(instance).data)
+
+
+class ProductListCreateAPIView(ListCreateAPIView):
+    queryset = Product.objects.select_related('category').all()
+    serializer_class = ProductSerializer
     pagination_class = CustomPagination
-    lookup_field = 'id'
+    permission_classes = [IsAuth | IsAnon]
 
-    def get_serializer_class(self):
-        if self.request.method == 'GET':
-            return DirectorListSerializer
-        return self.serializer_class
+    def post(self, request, *args, **kwargs):
+        serializer = ProductValidateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-@api_view(['GET', 'PUT', 'DELETE'])
-def film_detail_api_view(request, id):
-    try:
-        film = Film.objects.get(id=id)
-    except:
-        return Response(data='Film not found!', status=status.HTTP_404_NOT_FOUND)
-    if request.method == 'GET':
-        data = FilmDetailSerializer(film, many=False).data
-        return Response(data=data)
-    elif request.method == 'DELETE':
-        film.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-    elif request.method == 'PUT':
-        validator = FilmValidator(data=request.data)
-        if not validator.is_valid():
-            return Response(status=HTTP_400_BAD_REQUEST,
-                            data=validator.errors)
-        validated = validator.validated_data
+        # Get validated data
+        title = serializer.validated_data.get('title')
+        description = serializer.validated_data.get('description')
+        price = serializer.validated_data.get('price')
+        category = serializer.validated_data.get('category')
 
-        film.title = validated.data['title']
-        film.text = validated.data['text']
-        film.release_date = validated.data['release_year']
-        film.rating = validated.data['rating']
-        film.is_hit = validated.data['is_hit']
-        film.director_id = validated.data['director_id']
-        film.genres.set(validated.data['genres'])
-        film.save()
-        return Response(status=status.HTTP_201_CREATED,
-                        data=FilmDetailSerializer(film).data)
-
-@api_view(['GET', 'POST'])
-def film_list_create_api_view(request):
-    if request.method == 'GET':
-        films = Film.objects.select_related('director').prefetch_related('genres', 'reviews').all()
-        list_ = FilmListSerializer(films, many=True).data
-        return Response(data=list_)
-    elif request.method == 'POST':
-        validator = FilmValidator(data=request.data)
-        if not validator.is_valid():
-            return Response(status=HTTP_400_BAD_REQUEST,
-                            data=validator.errors)
-        validated = validator.validated_data
-
-        title = validated.data['title']
-        text = validated.data['text']
-        release_date = validated.data['release_year']
-        rating = validated.data['rating']
-        is_hit = validated.data['is_hit']
-        director_id = validated.data['director_id']
-        genres = validated.data['genres']
-
-        film = Film.objects.create(
+        # Create product
+        product = Product.objects.create(
             title=title,
-            text=text,
-            release_date=release_date,
-            rating=rating,
-            is_hit=is_hit,
-            director_id=director_id
+            description=description,
+            price=price,
+            category=category
         )
-        film.genres.set(genres)
-        film.save()
 
-        return Response(status=status.HTTP_201_CREATED,
-                        data=FilmDetailSerializer(film).data)
+        return Response(data=ProductSerializer(product).data,
+                        status=status.HTTP_201_CREATED)
+
+
+class ProductDetailAPIView(RetrieveUpdateDestroyAPIView):
+    queryset = Product.objects.select_related('category').all()
+    serializer_class = ProductSerializer
+    lookup_field = 'id'
+    permission_classes = [(IsAuth & CanEditWithIn15Minutes) | IsAnon | IsModerator]
+
+    def put(self, request, *args, **kwargs):
+        product = self.get_object()
+        serializer = ProductValidateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        product.title = serializer.validated_data.get('title')
+        product.description = serializer.validated_data.get('description')
+        product.price = serializer.validated_data.get('price')
+        product.category = serializer.validated_data.get('category')
+        product.save()
+
+        return Response(data=ProductSerializer(product).data)
+
+
+class ReviewViewSet(ModelViewSet):
+    queryset = Review.objects.all()
+    serializer_class = ReviewSerializer
+    pagination_class = CustomPagination
+    lookup_field = 'id'
+
+    def create(self, request, *args, **kwargs):
+        serializer = ReviewValidateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Get validated data
+        text = serializer.validated_data.get('text')
+        stars = serializer.validated_data.get('stars')
+        product = serializer.validated_data.get('product')
+
+        # Create review
+        review = Review.objects.create(
+            text=text,
+            stars=stars,
+            product=product
+        )
+
+        return Response(data=ReviewSerializer(review).data,
+                        status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        review = self.get_object()
+        serializer = ReviewValidateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        review.text = serializer.validated_data.get('text')
+        review.stars = serializer.validated_data.get('stars')
+        review.product = serializer.validated_data.get('product')
+        review.save()
+
+        return Response(data=ReviewSerializer(review).data)
+
+
+class ProductWithReviewsAPIView(APIView):
+    def get(self, request):
+        paginator = CustomPagination()
+        products = Product.objects.select_related('category').prefetch_related('reviews').all()
+        result_page = paginator.paginate_queryset(products, request)
+
+        serializer = ProductWithReviewsSerializer(result_page, many=True)
+        return paginator.get_paginated_response(serializer.data)
