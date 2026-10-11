@@ -44,7 +44,10 @@ INSTALLED_APPS = [
     'rest_framework',
     'users',
     'rest_framework.authtoken',
-    'drf_yasg'
+    'drf_yasg',
+    "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
+
 ]
 
 MIDDLEWARE = [
@@ -61,9 +64,11 @@ MIDDLEWARE = [
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
+        # 'rest_framework.authentication.SessionAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
-    'PAGE_SIZE': 3
 }
+
 
 QUERYCOUNT = {
     'THRESHOLDS': {
@@ -173,3 +178,42 @@ SWAGGER_SETTINGS = {
         }
     }
 }
+
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=3),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": True,
+    "TOKEN_OBNAIN_SERIALIZER": ('users.serializers.CustomTokenObtainPairSerializer', ),
+}
+
+
+# GOOGLE_CLIENT_ID =
+# GOOGLE_CLIENT_SECRET =
+# GOOGLE_REDIRECT_URI =
+
+# CACHES = {
+#     "default": {
+#         "BACKEND": "django.core.cache.backends.redis.RedisCache",
+#         "LOCATION": "redis://127.0.0.1:6379/1",
+#     }
+# }
+
+# CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
+# CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
+# CELERY_ACCEPT_CONTENT = ['json']
+# CELERY_TASK_SERIALIZER = 'json'
+# CELERY_RESULT_SERIALIZER = 'json'
+# CELERY_TIMEZONE = 'UTC'
+#
+# from celery.schedules import crontab
+#
+# CELERY_BEAT_SCHEDULE = {
+#     'clear-old-logs-every-night': {
+#         'task': 'users.tasks.clear_old_logs_task',
+#         'schedule': crontab(hour=0, minute=0),
+#     },
+# }

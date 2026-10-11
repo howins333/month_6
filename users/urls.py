@@ -1,8 +1,27 @@
 from django.urls import path
-from users.views import RegistrationAPIView, AuthorizationAPIView, ConfirmUserAPIView
+from users.views import (
+    RegistrationAPIView,
+    AuthorizationAPIView,
+    ConfirmUserAPIView,
+    CustomTokenObtainPairView,
+    GoogleLoginRedirectView, 
+    GoogleCallbackView
+)
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+    TokenVerifyView,
+)
 
 urlpatterns = [
     path('registration/', RegistrationAPIView.as_view()),
     path('authorization/', AuthorizationAPIView.as_view()),
-    path('confirm/', ConfirmUserAPIView.as_view())
+    path('confirm/', ConfirmUserAPIView.as_view()),
+
+    path('auth/google/login/', GoogleLoginRedirectView.as_view(), name='google-login'),
+    path('auth/google/callback/', GoogleCallbackView.as_view(), name='google-callback'),
+
+    path('jwt/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('jwt/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('jwt/verify/', TokenVerifyView.as_view(), name='token_verify'),
 ]

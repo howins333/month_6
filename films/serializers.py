@@ -1,4 +1,6 @@
 from rest_framework import serializers
+
+from common.validators import validate_birthdate_from_token
 from .models import Category, Product, Review
 from rest_framework.exceptions import ValidationError
 
@@ -56,6 +58,12 @@ class ProductValidateSerializer(serializers.Serializer):
             return Category.objects.get(id=category_id)
         except Category.DoesNotExist:
             raise ValidationError('Category does not exist')
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        if request:
+            validate_birthdate_from_token(request)
+        return attrs
 
 
 class ReviewValidateSerializer(serializers.Serializer):
